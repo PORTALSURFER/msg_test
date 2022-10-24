@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 #[derive(Debug)]
 enum SomeCommand {
     One,
@@ -49,22 +47,20 @@ impl Subscriber for SomeOtherObject {
     }
 }
 
+trait Message {}
+
 trait Subscriber {
     fn process(&self, command: &CommandTypes);
 }
 
-type SubscriberType = Box<dyn Subscriber>;
-
-struct MessageProcessor<C> {
-    subscribers: Vec<SubscriberType>,
-    _phantom: PhantomData<C>,
+struct MessageProcessor {
+    subscribers: Vec<Box<dyn Subscriber>>,
 }
 
-impl<C> MessageProcessor<C> {
+impl MessageProcessor {
     fn new() -> Self {
         Self {
             subscribers: Vec::new(),
-            _phantom: PhantomData,
         }
     }
 
@@ -112,7 +108,7 @@ pub fn static_pass() {
     let some_object = SomeObject;
     let some_other_object = SomeOtherObject;
 
-    let mut message_processor = MessageProcessor::<CommandTypes>::new();
+    let mut message_processor = MessageProcessor::new();
 
     message_processor.register(Box::new(some_object));
     message_processor.register(Box::new(some_other_object));
