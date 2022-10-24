@@ -74,7 +74,7 @@ impl<C> MessageProcessor<C> {
 
     async fn run(self) {
         loop {
-            println!("processing commands..");
+            println!("STATIC: processing commands..");
 
             // cmd
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;

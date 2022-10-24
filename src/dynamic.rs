@@ -19,13 +19,39 @@ impl Subscriber for SomeObject {
         String::from("SomeObject")
     }
 }
+
 pub enum SomeObjectCommand {
     One,
     Two,
 }
+
 impl Command for SomeObjectCommand {
     fn get_name(&self) -> String {
         String::from("SomeObjectCommand")
+    }
+}
+
+#[derive(Debug)]
+struct SomeOtherObject;
+
+impl Subscriber for SomeOtherObject {
+    fn process(&self, message: Message) {
+        println!("Processing some_other_object, ({})", message.get_name());
+    }
+
+    fn get_name(&self) -> String {
+        String::from("SomeOtherObject")
+    }
+}
+
+pub enum SomeOtherObjectCommand {
+    OneOther,
+    TwoOther,
+}
+
+impl Command for SomeOtherObjectCommand {
+    fn get_name(&self) -> String {
+        String::from("SomeOtherObjectCommand")
     }
 }
 
@@ -39,15 +65,16 @@ struct MessageProcessor {
 }
 
 pub fn dynamic_pass() {
-    println!("Running");
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async move {
-        let some_obj = SomeObject;
+        let some_object = SomeObject;
+        let some_other_object = SomeOtherObject;
+
         let mut msg_proc = MessageProcessor::new();
 
-        msg_proc.register(Box::new(some_obj));
+        msg_proc.register(Box::new(some_object));
+        msg_proc.register(Box::new(some_other_object));
 
-        println!("Entering processors..");
         loop {
             msg_proc.run().await;
         }
@@ -67,10 +94,26 @@ impl MessageProcessor {
 
     pub async fn run(&self) {
         loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            println!("DYNAMIC: processing commands..");
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
             for subscriber in &self.subscribers {
-                println!("send msg to ({})", subscriber.get_name());
                 let message = Box::new(self::SomeObjectCommand::One);
+                subscriber.process(message);
+            }
+            tokio::time::sleep(Duration::from_millis(1750)).await;
+            for subscriber in &self.subscribers {
+                let message = Box::new(self::SomeObjectCommand::Two);
+                subscriber.process(message);
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            for subscriber in &self.subscribers {
+                let message = Box::new(self::SomeOtherObjectCommand::OneOther);
+                subscriber.process(message);
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            for subscriber in &self.subscribers {
+                let message = Box::new(self::SomeOtherObjectCommand::TwoOther);
                 subscriber.process(message);
             }
         }
