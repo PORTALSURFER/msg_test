@@ -1,103 +1,54 @@
-#[derive(Debug)]
-enum SomeCommand {
+type SubscriberReceiver = tokio::sync::broadcast::Receiver<CommandTypes>;
+type SubscriberSender = tokio::sync::broadcast::Sender<CommandTypes>;
+
+#[derive(Debug, Clone)]
+enum CommandTypes {
     One,
     Two,
 }
 
 #[derive(Debug)]
-enum SomeOtherCommand {
-    OneOther,
-    TwoOther,
+struct SomeObject {
+    receiver: Option<SubscriberReceiver>,
 }
 
-#[derive(Debug)]
-enum CommandTypes {
-    SomeCommand(SomeCommand),
-    SomeOtherCommand(SomeOtherCommand),
-}
-
-impl CommandTypeCollection for CommandTypes {}
-trait CommandTypeCollection {}
-
-#[derive(Debug)]
-struct SomeObject;
-
-impl Subscriber for SomeObject {
-    fn process(&self, command: &CommandTypes) {
-        match command {
-            CommandTypes::SomeCommand(command) => {
-                println!("{:?} is processing: {:?}", self, command);
+impl SomeObject {
+    async fn run(self) {
+        if let Some(mut receiver) = self.receiver {
+            while let Ok(command) = receiver.recv().await {
+                match command {
+                    CommandTypes::One => println!("One"),
+                    CommandTypes::Two => println!("Two"),
+                }
             }
-            _ => {}
         }
     }
-}
-
-#[derive(Debug)]
-struct SomeOtherObject;
-
-impl Subscriber for SomeOtherObject {
-    fn process(&self, command: &CommandTypes) {
-        match command {
-            CommandTypes::SomeOtherCommand(command) => {
-                println!("{:?} is processing: {:?}", self, command);
-            }
-            _ => {}
-        }
-    }
-}
-
-trait Message {}
-
-trait Subscriber {
-    fn process(&self, command: &CommandTypes);
 }
 
 struct MessageProcessor {
-    subscribers: Vec<Box<dyn Subscriber>>,
+    subscriber_sender: SubscriberSender,
 }
 
 impl MessageProcessor {
     fn new() -> Self {
-        Self {
-            subscribers: Vec::new(),
-        }
+        let (subscriber_sender, _) = tokio::sync::broadcast::channel(8);
+        Self { subscriber_sender }
     }
 
-    fn register(&mut self, item: Box<dyn Subscriber>) {
-        self.subscribers.push(item)
+    fn register(&mut self) -> SubscriberReceiver {
+        self.subscriber_sender.subscribe()
     }
 
     async fn run(self) {
+        println!("processing commands..");
         loop {
-            println!("STATIC: processing commands..");
-
-            // cmd
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let command = CommandTypes::SomeCommand(SomeCommand::One);
-            for subscriber in &self.subscribers {
-                subscriber.process(&command);
-            }
+            let command = CommandTypes::One;
+            let _ = self.subscriber_sender.send(command);
 
-            // cmd
-            tokio::time::sleep(std::time::Duration::from_millis(750)).await;
-            let command = CommandTypes::SomeCommand(SomeCommand::Two);
-            for subscriber in &self.subscribers {
-                subscriber.process(&command);
-            }
-
-            // cmd
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            let command = CommandTypes::SomeOtherCommand(SomeOtherCommand::OneOther);
-            for subscriber in &self.subscribers {
-                subscriber.process(&command);
-            }
-            // cmd
-            tokio::time::sleep(std::time::Duration::from_millis(1250)).await;
-            let command = CommandTypes::SomeOtherCommand(SomeOtherCommand::TwoOther);
-            for subscriber in &self.subscribers {
-                subscriber.process(&command);
-            }
+            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+            let command = CommandTypes::Two;
+            let _ = self.subscriber_sender.send(command);
         }
     }
 }
@@ -105,15 +56,16 @@ impl MessageProcessor {
 pub fn static_pass() {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let some_object = SomeObject;
-    let some_other_object = SomeOtherObject;
-
+    let mut some_object = SomeObject { receiver: None };
     let mut message_processor = MessageProcessor::new();
 
-    message_processor.register(Box::new(some_object));
-    message_processor.register(Box::new(some_other_object));
+    some_object.receiver = Some(message_processor.register());
 
     rt.block_on(async {
+        tokio::spawn(async {
+            some_object.run().await;
+        });
+
         message_processor.run().await;
     })
 }
