@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 type SubscriberReceiver = tokio::sync::broadcast::Receiver<CommandTypes>;
 type SubscriberSender = tokio::sync::broadcast::Sender<CommandTypes>;
 
@@ -8,6 +9,7 @@ enum CommandTypes {
 }
 
 #[derive(Debug)]
+<<<<<<< HEAD
 struct SomeObject {
     receiver: Option<SubscriberReceiver>,
 }
@@ -53,16 +55,21 @@ impl MessageProcessor {
     }
 }
 
+
 pub fn static_pass() {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
+<<<<<<< HEAD
     let mut some_object = SomeObject { receiver: None };
     let mut message_processor = MessageProcessor::new();
+
+
 
     some_object.receiver = Some(message_processor.register());
 
     rt.block_on(async {
         tokio::spawn(async {
+<<<<<<< HEAD
             some_object.run().await;
         });
 
