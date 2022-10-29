@@ -1,71 +1,73 @@
-type SubscriberReceiver = tokio::sync::broadcast::Receiver<CommandTypes>;
-type SubscriberSender = tokio::sync::broadcast::Sender<CommandTypes>;
+use self::messaging::DefineCommand;
+use std::time::Duration;
 
-#[derive(Debug, Clone)]
-enum CommandTypes {
+mod messaging {
+    pub trait DefineCommand: Sized {
+        type Command: Clone;
+    }
+}
+
+#[derive(Clone)]
+enum TestCommand {
     One,
     Two,
 }
 
-#[derive(Debug)]
-struct SomeObject {
-    receiver: Option<SubscriberReceiver>,
+struct SomeObject<C: DefineCommand> {
+    receiver: tokio::sync::broadcast::Receiver<C::Command>,
 }
 
-impl SomeObject {
-    async fn run(self) {
-        if let Some(mut receiver) = self.receiver {
-            while let Ok(command) = receiver.recv().await {
-                match command {
-                    CommandTypes::One => println!("One"),
-                    CommandTypes::Two => println!("Two"),
-                }
+impl<R> SomeObject<R>
+where
+    R: DefineCommand<Command = TestCommand>,
+{
+    async fn run(mut self) {
+        println! {"running"};
+        while let Ok(command) = self.receiver.recv().await {
+            match command {
+                TestCommand::One => println!("received One"),
+                TestCommand::Two => println!("received Two"),
             }
         }
     }
 }
 
-struct MessageProcessor {
-    subscriber_sender: SubscriberSender,
+struct Command {}
+
+impl DefineCommand for Command {
+    type Command = TestCommand;
 }
 
-impl MessageProcessor {
-    fn new() -> Self {
-        let (subscriber_sender, _) = tokio::sync::broadcast::channel(8);
-        Self { subscriber_sender }
-    }
+struct UserInterface<C: DefineCommand> {
+    sender: tokio::sync::broadcast::Sender<C::Command>,
+}
 
-    fn register(&mut self) -> SubscriberReceiver {
-        self.subscriber_sender.subscribe()
-    }
-
+impl<C> UserInterface<C>
+where
+    C: DefineCommand<Command = TestCommand>,
+{
     async fn run(self) {
-        println!("processing commands..");
         loop {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let command = CommandTypes::One;
-            let _ = self.subscriber_sender.send(command);
+            let _ = self.sender.send(TestCommand::One);
+            let _ = self.sender.send(TestCommand::Two);
 
-            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-            let command = CommandTypes::Two;
-            let _ = self.subscriber_sender.send(command);
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
     }
 }
 
 pub fn static_pass() {
     let rt = tokio::runtime::Runtime::new().unwrap();
+    let (sender, receiver) = tokio::sync::broadcast::channel(8);
 
-    let mut some_object = SomeObject { receiver: None };
-    let mut message_processor = MessageProcessor::new();
-
-    some_object.receiver = Some(message_processor.register());
+    let some_object: SomeObject<Command> = SomeObject { receiver };
+    let user_interface: UserInterface<Command> = UserInterface { sender };
 
     rt.block_on(async {
-        tokio::spawn(async {
+        rt.spawn(async {
             some_object.run().await;
         });
 
-        message_processor.run().await;
+        user_interface.run().await;
     })
 }
